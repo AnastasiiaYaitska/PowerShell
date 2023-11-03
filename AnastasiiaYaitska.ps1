@@ -28,16 +28,17 @@ KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 function handlerFileGrate500MB {
     try {
         # henter en liste over filer og mapper. -Recurse -returnerer en liste over objekter som representerer filer og mapper
-        Get-ChildItem C:\Users -Recurse  
+        Get-ChildItem C:\Users -Recurse | 
         # where-object - en filterfunksjon. { $_.length -gt 524288000 }- statemant. returnere elementer > 500MB
-        | where-object { $_.length -gt 524288000 } 
+        where-object { $_.length -gt 524288000 } | 
         #  resultatene basert på filstørrelse i stigende rekkefølge
-        | Sort-Object length 
+        Sort-Object length | 
         # Alias  ft -> Format-Table. Vise fullstendige navn og størrelse på filene i tabellen.
-        | ft fullname, length -auto
+        ft fullname, length -auto
     } 
     catch {
-        Write-Host "Det oppstod en feil under udførelsen af kommandoen."
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
     }
 
 
@@ -247,102 +248,186 @@ function handlerInstalledApplication {
 
 }
 
+function handlerSystemErrorsLast14Days {
+    try {
+        # Get-EventLog hente begivenhedslogposter
+        Get-EventLog 
+        #-LogName System angiver navnet på loggen
+        -LogName System 
+        # filtrerer begivenhedslogposterne baseret på typen af begivenhed
+        -EntryType Error 
+        #angiver et tidsfilter
+        -After (Get-Date).AddDays(-14) 
+    }
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
 
+    
+    }
+}
 
 function handlerLogonEventsLast14days {
-    #start- og slutdatoer, der bruges til at begrænse søgningen til sikkerhedslogfiler i en bestemt tidsperiode (her de sidste 14 dage).
-    $startDate = (Get-Date).AddDays(-14)
-    $endDate = Get-Date
+    try {
+        #start- og slutdatoer, der bruges til at begrænse søgningen til sikkerhedslogfiler i en bestemt tidsperiode (her de sidste 14 dage).
+        $startDate = (Get-Date).AddDays(-14)
+        $endDate = Get-Date
 
-    $usernames = @()  # Opretter en tom liste til at gemme brugernavne
+        $usernames = @()  # Opretter en tom liste til at gemme brugernavne
 
-    #henter hændelser fra Windows-sikkerhedsloggen med specifikke egenskaber, herunder LogName, StartTime, EndTime og ID. Den leder specifikt efter begivenheder med ID 4624, som repræsenterer et vellykket login.
-    $logs = Get-WinEvent -FilterHashtable @{
-        LogName   = 'Security'
-        StartTime = $startDate
-        EndTime   = $endDate
-        ID        = 4624
-    } 
-    #For hver modtaget hændelse gemmes brugernavnet fra den sjette egenskab i $username-variablen. Den kontrollerer derefter, om brugernavnet allerede er på listen over brugernavne. Hvis ikke, tidføjes det til listen.
-    | ForEach-Object {
-        $username = $_.Properties[5].Value  # Gemmer brugernavnet fra den 6. egenskab
-        if ($username -notin $usernames) {
-            # Kontrollerer om brugernavnet allerede er til stede i listen
-            $usernames += $username  # Tilføjer brugernavnet til listen, hvis det ikke allerede er til stede
+        #henter hændelser fra Windows-sikkerhedsloggen med specifikke egenskaber, herunder LogName, StartTime, EndTime og ID. Den leder specifikt efter begivenheder med ID 4624, som repræsenterer et vellykket login.
+        $logs = Get-WinEvent -FilterHashtable @{
+            LogName   = 'Security'
+            StartTime = $startDate
+            EndTime   = $endDate
+            ID        = 4624
+        } | 
+        #For hver modtaget hændelse gemmes brugernavnet fra den sjette egenskab i $username-variablen. Den kontrollerer derefter, om brugernavnet allerede er på listen over brugernavne. Hvis ikke, tidføjes det til listen.
+        ForEach-Object {
+            $username = $_.Properties[5].Value  # Gemmer brugernavnet fra den 6. egenskab
+            if ($username -notin $usernames) {
+                # Kontrollerer om brugernavnet allerede er til stede i listen
+                $usernames += $username  # Tilføjer brugernavnet til listen, hvis det ikke allerede er til stede
+            }
+            $properties = @{
+                TimeCreated = $_.TimeCreated
+                Username    = $username
+            }
+
+            #opretter et PowerShell-objekt med egenskaberne TimeCreated og Brugernavn, der repræsenterer hændelsestidspunktet og brugernavnet.
+            New-Object PSObject -Property $properties
         }
-        $properties = @{
-            TimeCreated = $_.TimeCreated
-            Username    = $username
-        }
 
-        #opretter et PowerShell-objekt med egenskaberne TimeCreated og Brugernavn, der repræsenterer hændelsestidspunktet og brugernavnet.
-        New-Object PSObject -Property $properties
+        $logs  # Returnerer resultatet, der indeholder tidspunkt, unikke brugernavne og meddelelser for hver hændelse.
     }
-
-    $logs  # Returnerer resultatet, der indeholder tidspunkt, unikke brugernavne og meddelelser for hver hændelse.
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
+    }
+  
 }
 
 function handlerHarddiskState {
-    #  Get-PhysicalDisk-henter en liste over fysiske diske, der er tilsluttet computeren, inklusive interne og eksterne diske.
-    # | - operator, der bruges til at videregive resultatet (Pipeline-operator)
-    # Select-Object- specifikke egenskaber fra et objekt eller en liste over objekter.
-    # DeviceId, MediaType, OperationalStatus, Size, HealthStatus - vælgerne resultater
-    Get-PhysicalDisk | Select-Object DeviceId, MediaType, OperationalStatus, Size, HealthStatus
+    try {
+        #  Get-PhysicalDisk-henter en liste over fysiske diske, der er tilsluttet computeren, inklusive interne og eksterne diske.
+        # | - operator, der bruges til at videregive resultatet (Pipeline-operator)
+        # Select-Object- specifikke egenskaber fra et objekt eller en liste over objekter.
+        # DeviceId, MediaType, OperationalStatus, Size, HealthStatus - vælgerne resultater
+        Get-PhysicalDisk | Select-Object DeviceId, MediaType, OperationalStatus, Size, HealthStatus
+    }
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
+    }
+ 
 }
 
 function handlerHarddiskFileSystem {
-    # Get-PSDrive
-    Get-WmiObject -Class win32_logicaldisk | Format-Table DeviceId, MediaType, @{n = "Size"; e = { [math]::Round($_.Size / 1GB, 2) } }, @{n = "FreeSpace"; e = { [math]::Round($_.FreeSpace / 1GB, 2) } }
+    # 1 .Get-PSDrive .Mulige variant. At hente en liste over de logiske drev på computeren
+    try {
+        #2. WMI (Windows Management Instrumentation) til å hente informasjon om logiske disker på datamaskinen. Den spesifikke klasse som brukes her er win32_logicaldisk, som gir informasjon om logiske disker på datamaskinen.
+        Get-WmiObject -Class win32_logicaldisk | 
+        #formaterer informasjonen som er hentet fra win32_logicaldisk
+        Format-Table DeviceId, MediaType, @{n = "Size"; e = { 
+                #[math]::Round($_.Size / 1GB, 2): Dette udtryk tager diskens samlede størrelse (størrelse) i bytes, som normalt er givet af $_.Size, og dividerer det med antallet af bytes i en gigabyte (1 GB ) for at konvertere den til gigabyte. Derefter bruges Round-metoden fra System.Math-klassen til at afrunde resultatet til to decimaler. Dette giver diskens størrelse i gigabyte (GB) til to decimaler.
+                [math]::Round($_.Size / 1GB, 2) } 
+            #ledig ledig plads på disken (FreeSpace) i bytes, normalt givet af $_.FreeSpace
+        }, @{n = "FreeSpace"; e = { [math]::Round($_.FreeSpace / 1GB, 2) } }
+    }
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
+    }
+  
     
 }
 
 function handlerTEMPAndSoftwareDescription {
+    try {
+        $tempPath = "$env:TEMP"  # Stien til TEMP-mappen
+        $softwareDistributionPath = "$env:SystemRoot\SoftwareDistribution"  # Stien til SoftwareDistribution-mappen
 
-    $tempPath = "$env:TEMP"  # Stien til TEMP-mappen
-    $softwareDistributionPath = "$env:SystemRoot\SoftwareDistribution"  # Stien til SoftwareDistribution-mappen
+        #Get-ChildItem -at hente filer i både TEMP-mappen og SoftwareDistribution-mappen
+        #Measure-Object bruges til at måle summen af ​​længderne af filerne (størrelsen) i hver mappe
+        $tempSize = Get-ChildItem -Path $tempPath -Recurse | Measure-Object -Property Length -Sum | Select-Object -ExpandProperty Sum
+        $tempSizeGB = [math]::Round($tempSize / 1GB, 2)
 
-    $tempSize = Get-ChildItem -Path $tempPath -Recurse | Measure-Object -Property Length -Sum | Select-Object -ExpandProperty Sum
-    $tempSizeGB = [math]::Round($tempSize / 1GB, 2)
+        $softwareDistributionSize = Get-ChildItem -Path $softwareDistributionPath -Recurse | Measure-Object -Property Length -Sum | 
+        #Select-Object -ExpandProperty Sum bruges til at vælge og udvide summen af ​​størrelsen af ​​de fundne filer
+        Select-Object -ExpandProperty Sum
+        $softwareDistributionSizeGB = [math]::Round($softwareDistributionSize / 1GB, 2)
 
-    $softwareDistributionSize = Get-ChildItem -Path $softwareDistributionPath -Recurse | Measure-Object -Property Length -Sum | Select-Object -ExpandProperty Sum
-    $softwareDistributionSizeGB = [math]::Round($softwareDistributionSize / 1GB, 2)
-
-    [PSCustomObject]@{
-        TempFolderSizeGB                 = $tempSizeGB
-        SoftwareDistributionFolderSizeGB = $softwareDistributionSizeGB
+        #formere table
+        [PSCustomObject]@{
+            TempFolderSizeGB                 = $tempSizeGB
+            SoftwareDistributionFolderSizeGB = $softwareDistributionSizeGB
+        }
     }
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
+    }
+    
 }
 
 
 function handlerTestInternetConnectionAndSpeed {
+    try {
+        $url = "http://www.google.com"
+        # Test-Connection tester forbindelsen til webstedet "www.google.com" ved at sende fire ping-anmodninger
+        $pingResult = Test-Connection -ComputerName "www.google.com" -Count 4 |
+        # Measure-Object ResponseTime -Average | Select-Object -ExpandProperty Average: Dette beregner den gennemsnitlige responstid for ping-anmodninger sendt i Test-Connection-kommandoen.
+        Measure-Object ResponseTime -Average | Select-Object -ExpandProperty Average
+        #beregner downloadhastigheden ved at dividere indholdslængden af ​​filen med 1MB.
+        $downloadSpeed = ((Invoke-WebRequest -Uri "http://speedtest.wdc01.softlayer.com/downloads/test10.zip").Headers.'Content-Length') / 1MB
 
-    $url = "http://www.google.com"
-    $pingResult = Test-Connection -ComputerName "www.google.com" -Count 4 | Measure-Object ResponseTime -Average | Select-Object -ExpandProperty Average
-    $downloadSpeed = ((Invoke-WebRequest -Uri "http://speedtest.wdc01.softlayer.com/downloads/test10.zip").Headers.'Content-Length') / 1MB
+        # hvis ping ok, vi skriv det i variabl, hvis ikke- det bliv "Not Available"
+        $internetStatus = "Not Available"
+        if ($pingResult) {
+            $internetStatus = "Available"
+        }
 
-    $internetStatus = "Not Available"
-    if ($pingResult) {
-        $internetStatus = "Available"
+        # #formere table
+        [PSCustomObject]@{
+            InternetStatus   = $internetStatus
+            GooglePingTimeMs = $pingResult
+            DownloadSpeedMB  = $downloadSpeed
+        }
     }
-
-    [PSCustomObject]@{
-        InternetStatus   = $internetStatus
-        GooglePingTimeMs = $pingResult
-        DownloadSpeedMB  = $downloadSpeed
+    catch {
+        #Variablen $_, som kan bruges til at udskrive detaljerede oplysninger om fejlen.
+        Write-Host "An error occurred: $_" 
     }
+   
 }
 
 
 function handlerShowDataButton {
-    Add-Type -AssemblyName System.Windows.Forms
-    $NewForm = New-Object Windows.Forms.Form
-    $NewForm.Size = New-Object Drawing.Size @(250, 150)
-    $NewForm.StartPosition = "CenterScreen"
-    $Button = New-Object System.Windows.Forms.Button
-    $Button.add_click({ Get-Date | Out-Host })
-    $Button.Text = "Click here"
-    $NewForm.Controls.Add($Button)
-    $Dialouge = $NewForm.ShowDialog()
+    try {
+        #giver dig mulighed for at oprette Windows-baserede formularer og kontrolelementer
+        Add-Type -AssemblyName System.Windows.Forms 
+        #et nyt Windows-formularobjekt.
+        $NewForm = New-Object Windows.Forms.Form 
+        #indstiller størrelsen på det nye vindue til at være 250x150 pixels.
+        $NewForm.Size = New-Object Drawing.Size @(250, 150)
+        #indstiller startpositionen for det nye vindue til midten af ​​skærmen.
+        $NewForm.StartPosition = "CenterScreen"
+        #opretter en ny knap, der skal tilføjes til vinduet.
+        $Button = New-Object System.Windows.Forms.Button
+        #tilføjer en hændelseshandler til knappen, som i dette tilfælde udskriver den aktuelle dato til konsollen, når der klikkes på knappen.
+        $Button.add_click({ Get-Date | Out-Host })
+        #indstiller teksten vist på knappen til "Klik her".
+        $Button.Text = "Click here"
+        #tilføjer knappen til kontrollerne i det nye vindue.
+        $NewForm.Controls.Add($Button)
+        #viser det nye vinduet som en dialogboks.
+        $Dialouge = $NewForm.ShowDialog()
+    }
+    catch {
+        #udskriver en fejlmeddelelse, hvis der opstår en undtagelse under udførelsen af ​​koden i prøveblokken
+        Write-Host "An error occurred: $_"
+    }
+  
     
 }
 
@@ -374,7 +459,7 @@ do {
     switch ($input) {
         '1' { handlerFileGrate500MB }
         '2' { handlerInstalledApplication }
-        '3' { FejlLogSeneste14Dage }
+        '3' { handlerSystemErrorsLast14Days }
         '4' { handlerLogonEventsLast14days }
         '5' { handlerHarddiskState }
         '6' { handlerHarddiskFileSystem }
