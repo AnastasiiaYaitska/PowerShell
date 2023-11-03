@@ -1,3 +1,5 @@
+# Køre din PowerShell as Administrator. Tak. 
+
 $asciiBear = @"
 KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK000KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
@@ -24,15 +26,33 @@ KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
 "@
 
 function handlerFileGrate500MB {
-    Get-ChildItem C:\Users -recurse | where-object { $_.length -gt 524288000 } | Sort-Object length | ft fullname, length -auto
+    try {
+        # henter en liste over filer og mapper. -Recurse -returnerer en liste over objekter som representerer filer og mapper
+        Get-ChildItem C:\Users -Recurse  
+        # where-object - en filterfunksjon. { $_.length -gt 524288000 }- statemant. returnere elementer > 500MB
+        | where-object { $_.length -gt 524288000 } 
+        #  resultatene basert på filstørrelse i stigende rekkefølge
+        | Sort-Object length 
+        # Alias  ft -> Format-Table. Vise fullstendige navn og størrelse på filene i tabellen.
+        | ft fullname, length -auto
+    } 
+    catch {
+        Write-Host "Det oppstod en feil under udførelsen af kommandoen."
+    }
+
+
+    # mulige script
     # Get-ChildItem -Path C:\Users -Recurse | Where-Object -FilterScript { $_.length -gt 500MB }
 }
 
 
-
+#tog fra nettet
 function handlerInstalledApplication { 
     # Registry Hives 
+    #$Object = @() - tom array. Senere vi tilføje data fra installed addlications
     $Object = @() 
+
+    #liste over streger som skal ekskluderes fra rapporten.
     $excludeArray = (
         "Security Update for Windows",
         "Update for Windows",
@@ -43,6 +63,8 @@ function handlerInstalledApplication {
         "Hotfix for Microsoft Visual Studio 2007 Tools",
         "Hotfix"
     )
+
+    #definerer numeriske værdier for forskellige registernøkler. [lang] som repræsenterer forskellige typer registernøkler (bistader). Disse numbe bruges senere i scriptet til at få adgang til forskellige dele af Windows-registret.
     [long]$HIVE_HKROOT = 2147483648 
     [long]$HIVE_HKCU = 2147483649 
     [long]$HIVE_HKLM = 2147483650 
@@ -50,8 +72,10 @@ function handlerInstalledApplication {
     [long]$HIVE_HKCC = 2147483653 
     [long]$HIVE_HKDD = 2147483654 
 
+    #Get-WmiObject-hente information om processorer i systemet.  Den spesifiserer at den skal hente AddressWidth, DataWidth og Architecture fra Win32_Processor-klassen.
     $Query = Get-WmiObject -query "Select AddressWidth, DataWidth,Architecture from Win32_Processor"
     
+    #foreach ($i in $Query) { ... }: Dette er en løkke som itererer gjennom hvert element i resultatet fra WMI-spørringen. Den sjekker om AddressWidth-verdien er lik 64. Hvis den er det, blir variabelen $OSArch satt til '64-bit'. Hvis ikke, blir den satt til '32-bit'.
     foreach ($i in $Query) { 
         If ($i.AddressWidth -eq 64) {             
             $OSArch = '64-bit' 
@@ -61,20 +85,27 @@ function handlerInstalledApplication {
         } 
     } 
 
+
+    # Switch-sætning, den kontrollerer værdien af ​​$OSArch-variablen. Afhængigt af værdien udføres forskellige handlinger for henholdsvis 64-bit og 32-bit arkitekturer. 
     Switch ($OSArch) { 
         "64-bit" {
+            #Get-WmiObject bruges til at hente et WMI-objekt repræsenteret af "StdRegProv" fra registreringsdatabasen.
+            #Forskellige registreringsnøglestier er defineret baseret på hvilke installationssteder, der skal inspiceres.
             $RegProv = Get-WmiObject -Namespace "root\default" -List | where { $_.Name -eq "StdRegProv" }
             $Hive = $HIVE_HKLM 
             $RegKey_64BitApps_64BitOS = "Software\Microsoft\Windows\CurrentVersion\Uninstall" 
             $RegKey_32BitApps_64BitOS = "Software\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall" 
             $RegKey_32BitApps_32BitOS = "Software\Microsoft\Windows\CurrentVersion\Uninstall" 
 
+            #Brug EnumKey-metoden til at hente en liste over undernøgler til de angivne registreringsnøgler.
             $SubKeys = $RegProv.EnumKey($HIVE, $RegKey_64BitApps_64BitOS) 
 
-            # Make Sure No Error when Reading Registry 
+            #Sørg for, at der ikke opstår fejl, når du læser registreringsdatabasen
 
             if ($SubKeys.ReturnValue -eq 0) {
-                # Loop Trhough All Returned SubKEys 
+                #En foreach loop køres gennem hver undernøgle, hvor information som navn, version og udgiver hentes fra registreringsdatabasen.
+                #Der foretages en kontrol for at se, om applikationsnavnet starter med nogen af ​​de ekskluderede strenge i excludeArray'en.
+                #Hvis applikationen ikke er udelukket, tilføjes oplysningerne til $Object-arrayet.
                 ForEach ($Name in $SubKeys.sNames) { 
                     $SubKey = "$RegKey_64BitApps_64BitOS\$Name" 
                     $ValueName = "DisplayName" 
@@ -111,11 +142,11 @@ function handlerInstalledApplication {
 
             $SubKeys = $RegProv.EnumKey($HIVE, $RegKey_32BitApps_64BitOS) 
 
-            # Make Sure No Error when Reading Registry 
+            # Sørg for, at der ikke opstår fejl, når du læser registreringsdatabasen 
 
             if ($SubKeys.ReturnValue -eq 0) { 
 
-                # Loop Through All Returned SubKEys 
+                # Loop gennem alle returnerede undernøgler
 
                 ForEach ($Name in $SubKeys.sNames) { 
 
@@ -151,19 +182,20 @@ function handlerInstalledApplication {
             } 
 
         }
+        #På samme måde som i 64-bit-delen
         "32-bit" {
             $RegProv = Get-WmiObject -Namespace "root\default" -List | where { $_.Name -eq "StdRegProv" }
             $Hive = $HIVE_HKLM 
             $RegKey_32BitApps_32BitOS = "Software\Microsoft\Windows\CurrentVersion\Uninstall" 
 
-            # Get SubKey names 
+            # Hent SubKey navner 
 
             $SubKeys = $RegProv.EnumKey($HIVE, $RegKey_32BitApps_32BitOS) 
 
-            # Make Sure No Error when Reading Registry 
+            # Sørg for, at der ikke opstår fejl, når du læser registreringsdatabasen 
 
             if ($SubKeys.ReturnValue -eq 0) {
-                # Loop Through All Returned SubKEys 
+                # Loop gennem alle returnerede SubKEys 
 
                 ForEach ($Name in $SubKeys.sNames) { 
                     $SubKey = "$RegKey_32BitApps_32BitOS\$Name" 
@@ -190,39 +222,49 @@ function handlerInstalledApplication {
         }
     }
 
+    #$column1 ... $column5: Disse linjer definerer forskellige kolonner for printformatet. Hver kolonne er defineret med specifikke egenskaber såsom udtryk, bredde, etiket og justering. Dette hjælper med at formatere og strukturere dataene til præsentation.
     $column1 = @{expression = "ServerName"; width = 15; label = "Name"; alignment = "left" } 
     $column2 = @{expression = "Architecture"; width = 10; label = "32/64 Bit"; alignment = "left" } 
     $column3 = @{expression = "Appication"; width = 80; label = "Appication"; alignment = "left" } 
     $column4 = @{expression = "Version"; width = 15; label = "Version"; alignment = "left" } 
     $column5 = @{expression = "Publisher"; width = 30; label = "Publisher"; alignment = "left" } 
 
+    #"#" * 80: Denne kommando repræsenterer en streng med 80 # tegn. Dette bruges til at oprette en linje af disse tegn og fungerer som en separator i outputtet.
     "#" * 80 
+    #beskrivende oplysninger, der skal inkluderes i rapporten. Disse linjer giver oplysninger om, hvad rapporten viser, og antallet af installerede applikationer.
     "Installed Software Application Report" 
     "Numner of Installed Application count : $($object.count)" 
+    #$(get-date) og $(gc env:computernavn) er PowerShell-kommandoer, der henter henholdsvis den aktuelle dato og computernavnet.
     "Generated $(get-date)" 
+    # gc -> Get-Content  
     "Generated from $(gc env:computername)" 
     "#" * 80 
 
+    #formaterer dataene i tabelformat ved hjælp af de definerede kolonner og viser oplysningerne i konsollen.
     $object | Format-Table $column1, $column2, $column3 , $column4, $column5 
+    #$objekt | Out-GridView: Denne kommando åbner et grafisk visningsvindue (GridView), der viser dataene i et brugervenligt format, så brugeren nemt kan gennemse og udforske informationen.
     $object | Out-GridView  
 
 }
 
 
 
-# Kør funktionen for at få loggen for logins for de seneste 14 dage med unikke brugernavne
 function handlerLogonEventsLast14days {
+    #start- og slutdatoer, der bruges til at begrænse søgningen til sikkerhedslogfiler i en bestemt tidsperiode (her de sidste 14 dage).
     $startDate = (Get-Date).AddDays(-14)
     $endDate = Get-Date
 
     $usernames = @()  # Opretter en tom liste til at gemme brugernavne
 
+    #henter hændelser fra Windows-sikkerhedsloggen med specifikke egenskaber, herunder LogName, StartTime, EndTime og ID. Den leder specifikt efter begivenheder med ID 4624, som repræsenterer et vellykket login.
     $logs = Get-WinEvent -FilterHashtable @{
         LogName   = 'Security'
         StartTime = $startDate
         EndTime   = $endDate
         ID        = 4624
-    } | ForEach-Object {
+    } 
+    #For hver modtaget hændelse gemmes brugernavnet fra den sjette egenskab i $username-variablen. Den kontrollerer derefter, om brugernavnet allerede er på listen over brugernavne. Hvis ikke, tidføjes det til listen.
+    | ForEach-Object {
         $username = $_.Properties[5].Value  # Gemmer brugernavnet fra den 6. egenskab
         if ($username -notin $usernames) {
             # Kontrollerer om brugernavnet allerede er til stede i listen
@@ -232,6 +274,8 @@ function handlerLogonEventsLast14days {
             TimeCreated = $_.TimeCreated
             Username    = $username
         }
+
+        #opretter et PowerShell-objekt med egenskaberne TimeCreated og Brugernavn, der repræsenterer hændelsestidspunktet og brugernavnet.
         New-Object PSObject -Property $properties
     }
 
@@ -239,7 +283,10 @@ function handlerLogonEventsLast14days {
 }
 
 function handlerHarddiskState {
-    # Få vist harddisk health/status for maskinen
+    #  Get-PhysicalDisk-henter en liste over fysiske diske, der er tilsluttet computeren, inklusive interne og eksterne diske.
+    # | - operator, der bruges til at videregive resultatet (Pipeline-operator)
+    # Select-Object- specifikke egenskaber fra et objekt eller en liste over objekter.
+    # DeviceId, MediaType, OperationalStatus, Size, HealthStatus - vælgerne resultater
     Get-PhysicalDisk | Select-Object DeviceId, MediaType, OperationalStatus, Size, HealthStatus
 }
 
