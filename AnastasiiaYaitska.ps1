@@ -1,4 +1,4 @@
-# Køre din PowerShell as Administrator. Tak. 
+¢# Køre din PowerShell as Administrator. Tak. 
 
 $asciiBear = @"
 KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKK
